@@ -955,14 +955,19 @@ const SITE_ADAPTERS = {
     userMessageSelector: "[data-message-author-role='user']",
     assistantMessageSelectors: [
       "[data-message-author-role='assistant']",
+      "[data-content-search-unit-key$=':assistant']",
       "article[data-testid*='assistant']",
     ],
-    conversationMessageSelector: "[data-message-author-role]",
+    conversationMessageSelector: "[data-message-author-role], [data-content-search-unit-key$=':user'], [data-content-search-unit-key$=':assistant']",
     getMessageRole(node) {
-      return node.getAttribute("data-message-author-role");
+      const role = node.getAttribute("data-message-author-role");
+      if (role) return role;
+      const key = node.getAttribute("data-content-search-unit-key") || "";
+      return key.endsWith(":user") ? "user" : key.endsWith(":assistant") ? "assistant" : null;
     },
     getMessageId(node) {
-      return node.getAttribute?.("data-message-id") || node.id || null;
+      return node.getAttribute?.("data-message-id") ||
+        node.getAttribute?.("data-content-search-unit-key") || node.id || null;
     },
     conversationTurnSelector: "[data-testid^='conversation-turn']",
     actionBarSelectors: [
@@ -2971,6 +2976,23 @@ function hasResponseActionBar(assistantTurnKey = null) {
   if (!assistantMessages.length) return false;
   const lastMsg = assistantMessages[assistantMessages.length - 1];
 
+  // The newer ChatGPT layout places the response toolbar outside its search
+  // unit. Check the enclosing turn, excluding buttons inside the answer itself
+  // (citations and table controls can appear before generation is complete).
+  if (lastMsg.hasAttribute("data-content-search-unit-key")) {
+    const turn = lastMsg.parentElement?.parentElement?.parentElement;
+    if (turn) {
+      const completedActions = turn.querySelectorAll(
+        'button[aria-label="Copy"], button[aria-label="复制"]',
+      );
+      if (Array.from(completedActions).some((button) =>
+        !lastMsg.contains(button) && isVisibleElement(button))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Search within the conversation turn container (action bar can be a sibling
   // of the message node, not a child).
   const turnSel = SITE_ADAPTER?.conversationTurnSelector;
@@ -4233,6 +4255,7 @@ function extractDeepSeekAssistantSections(node) {
 
 function extractBestAssistantAnswerCandidate(prunedAssistant) {
   const contentSelectors = [
+    "[data-markdown-text-style='assistant-message']",
     ".markdown",
     ".ds-markdown",
     ".markdown-container",
@@ -4767,6 +4790,14 @@ function extractAttachmentNames(node) {
     "[class*='FileIcon']",
   ];
   const names = [];
+  if (SITE_ADAPTER?.siteId === "chatgpt") {
+    node.querySelectorAll('[class*="resource-card"]').forEach((card) => {
+      const filename = Array.from(card.querySelectorAll("span"))
+        .map((span) => shared.normalizeComposerText(span.textContent || ""))
+        .find((text) => /\.pdf$/i.test(text) && text.length < 300);
+      if (filename && !names.includes(filename)) names.push(filename);
+    });
+  }
   for (const selector of fileSelectors) {
     node.querySelectorAll(selector).forEach((element) => {
       const text = shared.normalizeComposerText(
@@ -4877,7 +4908,13 @@ function extractNormalizedMessage(node, index) {
   const role = SITE_ADAPTER?.getMessageRole?.(node) || node.getAttribute("data-message-author-role");
   if (role !== "user" && role !== "assistant") return null;
 
-  const attachments = extractAttachmentNames(node);
+  // In the newer ChatGPT layout submitted file cards are siblings of the
+  // searchable user text unit, within the same user-message container.
+  const attachmentNode = SITE_ADAPTER?.siteId === "chatgpt" &&
+    node.getAttribute?.("data-content-search-unit-key")?.endsWith(":user")
+    ? node.parentElement || node
+    : node;
+  const attachments = extractAttachmentNames(attachmentNode);
   const thinking =
     role === "assistant"
       ? shared.normalizeComposerText(extractAssistantThinkingText(node) || "")

@@ -1,5 +1,7 @@
 # Sync for Zotero
 
+> **Unofficial ChatGPT compatibility fork.** This repository is based on [yilewang/sync-for-zotero](https://github.com/yilewang/sync-for-zotero) v0.0.16. See [CHATGPT_DOM_FIX.md](CHATGPT_DOM_FIX.md) for the fix, installation instructions, and verification. The original Apache-2.0 license is retained.
+
 [中文说明](README_CN.md)
 
 A Chromium extension that works as the **webchat bridge** for the [LLM for Zotero](https://github.com/yilewang/llm-for-zotero) plugin. It connects Zotero to ChatGPT, DeepSeek, or Google Gemini via the browser: uploading PDFs and images, running prompts, syncing chat actions, and returning markdown results back to Zotero.
